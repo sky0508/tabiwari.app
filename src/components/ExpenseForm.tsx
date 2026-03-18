@@ -11,6 +11,8 @@ interface Props {
   onSave: (expense: Expense) => void;
 }
 
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
 export function ExpenseForm({ trip, editExpense, onBack, onSave }: Props) {
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
@@ -18,6 +20,7 @@ export function ExpenseForm({ trip, editExpense, onBack, onSave }: Props) {
   const [payer, setPayer] = useState(trip.members[0] || "");
   const [split, setSplit] = useState<string[]>([...trip.members]);
   const [category, setCategory] = useState("food");
+  const [date, setDate] = useState(todayStr());
 
   useEffect(() => {
     if (editExpense) {
@@ -27,6 +30,7 @@ export function ExpenseForm({ trip, editExpense, onBack, onSave }: Props) {
       setPayer(editExpense.payer);
       setSplit([...editExpense.splitAmong]);
       setCategory(editExpense.category);
+      setDate(editExpense.date || todayStr());
     }
   }, [editExpense]);
 
@@ -49,6 +53,7 @@ export function ExpenseForm({ trip, editExpense, onBack, onSave }: Props) {
       splitAmong: [...split],
       category,
       timestamp: editExpense?.timestamp || Date.now(),
+      date,
     };
     onSave(expense);
   };
@@ -62,7 +67,15 @@ export function ExpenseForm({ trip, editExpense, onBack, onSave }: Props) {
       </div>
 
       <div style={S.card}>
-        <label style={S.label}>何に使った？</label>
+        <label style={S.label}>日付</label>
+        <input
+          style={S.input}
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
+
+        <label style={{ ...S.label, marginTop: 16 }}>何に使った？</label>
         <input
           style={S.input}
           placeholder="例：カレー、タクシー"

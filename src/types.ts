@@ -7,6 +7,7 @@ export interface Expense {
   payer: string;
   splitAmong: string[];
   timestamp: number;
+  date?: string; // "YYYY-MM-DD"
 }
 
 export interface Trip {

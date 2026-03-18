@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { Trip, Expense, Settlement } from "../types";
 import { CATEGORIES, CURRENCIES } from "../constants";
 import { getMemberColor, getInitial, formatJPY } from "../constants";
@@ -27,6 +27,23 @@ export function Dashboard({
   onOpenMember,
 }: Props) {
   const [copied, setCopied] = useState(false);
+  const [expTab, setExpTab] = useState<"list" | "day">("list");
+
+  const expensesByDate = useMemo(() => {
+    const grouped: Record<string, typeof trip.expenses> = {};
+    trip.expenses.forEach((exp) => {
+      const key = exp.date || new Date(exp.timestamp).toISOString().slice(0, 10);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(exp);
+    });
+    return Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a));
+  }, [trip.expenses]);
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00");
+    const days = ["日", "月", "火", "水", "木", "金", "土"];
+    return `${d.getMonth() + 1}月${d.getDate()}日（${days[d.getDay()]}）`;
+  };
   const foreignCurrency = CURRENCIES.find((c) => c.code === trip.foreignCurrency);
   const foreignSymbol = foreignCurrency?.symbol || "$";
 
@@ -114,7 +131,15 @@ export function Dashboard({
         {trip.members.map((m, i) => {
           const bal = settlement?.balances?.[m] || 0;
           return (
-            <button key={m} style={S.memberCard} onClick={() => onOpenMember(m)}>
+            <button
+              key={m}
+              style={{
+                ...S.memberCard,
+                boxShadow: "0 2px 8px rgba(58,50,40,0.1)",
+                border: "1.5px solid rgba(212,201,181,0.7)",
+              }}
+              onClick={() => onOpenMember(m)}
+            >
               <div style={{ ...S.avatarMd, background: getMemberColor(i) }}>{getInitial(m)}</div>
               <div
                 style={{
@@ -140,23 +165,34 @@ export function Dashboard({
               >
                 {bal > 0.5 ? `+${formatJPY(bal)}` : bal < -0.5 ? formatJPY(bal) : "±0"}
               </div>
+              <div style={{ fontSize: 10, color: "#B5AA96", marginTop: 3 }}>詳細 ›</div>
             </button>
           );
         })}
       </div>
 
-      {/* Expense list */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 8,
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: 15, color: "#3A3228" }}>
-          支出一覧（{trip.expenses.length}件）
-        </h3>
+      {/* Expense tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+        {(["list", "day"] as const).map((tab) => (
+          <button
+            key={tab}
+            style={{
+              padding: "6px 16px",
+              borderRadius: 20,
+              border: "1.5px solid",
+              borderColor: expTab === tab ? "#6B5F4F" : "#D4C9B5",
+              background: expTab === tab ? "#6B5F4F" : "#FDFBF7",
+              color: expTab === tab ? "#FDFBF7" : "#6B5F4F",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+            onClick={() => setExpTab(tab)}
+          >
+            {tab === "list" ? `一覧（${trip.expenses.length}件）` : "日別"}
+          </button>
+        ))}
       </div>
 
       {trip.expenses.length === 0 ? (
@@ -164,7 +200,7 @@ export function Dashboard({
           <div style={{ fontSize: 40, marginBottom: 8 }}>📝</div>
           <p style={{ color: "#8B7E6A", margin: 0, fontSize: 14 }}>まだ支出がありません</p>
         </div>
-      ) : (
+      ) : expTab === "list" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[...trip.expenses].reverse().map((exp) => {
             const cat = CATEGORIES.find((c) => c.id === exp.category);
@@ -213,6 +249,86 @@ export function Dashboard({
                   >
                     削除
                   </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {expensesByDate.map(([dateKey, exps]) => {
+            const dayTotal = exps.reduce(
+              (sum, e) => sum + toJPY(e.amount, e.currency),
+              0
+            );
+            return (
+              <div key={dateKey}>
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 6,
+                  padding: "0 2px",
+                }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#6B5F4F" }}>
+                    {formatDate(dateKey)}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#3A3228" }}>
+                    {formatJPY(dayTotal)}
+                  </span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {exps.map((exp) => {
+                    const cat = CATEGORIES.find((c) => c.id === exp.category);
+                    const pi = trip.members.indexOf(exp.payer);
+                    return (
+                      <div key={exp.id} style={S.expCard}>
+                        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                          <div
+                            style={{ ...S.avatarSm, background: getMemberColor(pi), flexShrink: 0, marginTop: 2 }}
+                          >
+                            {getInitial(exp.payer)}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ fontSize: 13 }}>{cat?.emoji}</span>
+                              <span style={{ fontWeight: 600, fontSize: 14, color: "#3A3228" }}>{exp.title}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: "#8B7E6A", marginTop: 2 }}>
+                              {exp.payer} が支払い →{" "}
+                              {exp.splitAmong.length === trip.members.length
+                                ? "全員"
+                                : exp.splitAmong.join(", ")}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div style={{ fontWeight: 700, fontSize: 15, color: "#3A3228" }}>
+                              {exp.currency === "JPY"
+                                ? formatJPY(exp.amount)
+                                : foreignSymbol +
+                                  exp.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </div>
+                            {exp.currency !== "JPY" && (
+                              <div style={{ fontSize: 11, color: "#8B7E6A" }}>
+                                ≈ {formatJPY(toJPY(exp.amount, exp.currency))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 6 }}>
+                          <button style={S.tinyBtn} onClick={() => onEditExpense(exp)}>
+                            編集
+                          </button>
+                          <button
+                            style={{ ...S.tinyBtn, color: "#C25E4A" }}
+                            onClick={() => onDeleteExpense(exp.id)}
+                          >
+                            削除
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
